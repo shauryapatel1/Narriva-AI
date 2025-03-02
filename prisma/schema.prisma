@@ -1,0 +1,197 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Subscription information
+  plan          String    @default("Free")
+  planStartDate DateTime?
+  planEndDate   DateTime?
+
+  // User preferences
+  preferences   UserPreferences?
+
+  // Relationships
+  accounts      Account[]
+  sessions      Session[]
+  stories       Story[]         @relation("UserStories")
+  readingHistory ReadingProgress[]
+  favorites     Favorite[]
+}
+
+// User preferences model
+model UserPreferences {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Reading preferences
+  favoriteGenres    String[] // Stored as JSON array
+  narratorVoice     String   @default("Morgan")
+  readingSpeed      String   @default("Medium")
+  themeDarkMode     Boolean  @default(true)
+  notifications     Boolean  @default(true)
+  
+  // Audio preferences
+  audioEnabled      Boolean  @default(true)
+  backgroundMusic   Boolean  @default(true)
+  soundEffects      Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// Story model
+model Story {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  coverImage  String?
+  genre       String
+  isPublic    Boolean  @default(true)
+  isPublished Boolean  @default(false)
+  
+  // Content
+  prompt      String   @db.Text
+  
+  // Metadata
+  authorId    String
+  author      User     @relation("UserStories", fields: [authorId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Stats
+  viewCount   Int      @default(0)
+  likeCount   Int      @default(0)
+  
+  // Relationships
+  storyNodes  StoryNode[]
+  readingProgress ReadingProgress[]
+  favorites   Favorite[]
+}
+
+// Story node model (for branching narrative)
+model StoryNode {
+  id          String   @id @default(cuid())
+  storyId     String
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  
+  // Content
+  content     String   @db.Text
+  imageUrl    String?
+  audioUrl    String?
+  
+  // Node type and position
+  isStartNode Boolean  @default(false)
+  isEndNode   Boolean  @default(false)
+  
+  // Relationships
+  choices     Choice[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Choice model (for story branching)
+model Choice {
+  id              String    @id @default(cuid())
+  text            String
+  
+  // Relationships
+  sourceNodeId    String
+  sourceNode      StoryNode @relation(fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  
+  targetNodeId    String?
+  
+  // Metadata
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Reading progress model
+model ReadingProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId     String
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  
+  // Progress tracking
+  currentNodeId String?
+  progress     Int      @default(0) // Percentage complete
+  lastReadAt   DateTime @default(now())
+  
+  // History
+  visitedNodes String[] // Array of node IDs
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([userId, storyId])
+}
+
+// Favorite model
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, storyId])
+}
+
+// NextAuth.js models
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+} 
